@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/cosmin-harangus/go-bpmn-engine/engine"
-	pgstore "github.com/cosmin-harangus/go-bpmn-engine/store/pg"
 	"github.com/cosmin-harangus/go-bpmn-engine/store"
+	pgstore "github.com/cosmin-harangus/go-bpmn-engine/store/pg"
 	"github.com/cosmin-harangus/go-bpmn-engine/tenant"
 	bpmnserver "github.com/cosmin-harangus/go-bpmn-server/server"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
