@@ -1,3 +1,4 @@
 go-bpmn-server
+dist/
 *.env
 .env

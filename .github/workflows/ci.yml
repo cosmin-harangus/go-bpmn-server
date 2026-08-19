@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: go-bpmn-server
+
+      - uses: actions/checkout@v4
+        with:
+          repository: cosmin-harangus/go-bpmn-engine
+          path: go-bpmn-engine
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-bpmn-server/go.mod
+          cache: true
+          cache-dependency-path: go-bpmn-server/go.sum
+
+      - name: Check formatting
+        working-directory: go-bpmn-server
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Files not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        working-directory: go-bpmn-server
+        run: go vet ./...
+
+      - name: staticcheck
+        working-directory: go-bpmn-server
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: go-bpmn-server
+
+      - uses: actions/checkout@v4
+        with:
+          repository: cosmin-harangus/go-bpmn-engine
+          path: go-bpmn-engine
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-bpmn-server/go.mod
+          cache: true
+          cache-dependency-path: go-bpmn-server/go.sum
+
+      - name: Build
+        working-directory: go-bpmn-server
+        run: go build ./...

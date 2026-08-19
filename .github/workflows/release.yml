@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: go-bpmn-server
+
+      - uses: actions/checkout@v4
+        with:
+          repository: cosmin-harangus/go-bpmn-engine
+          path: go-bpmn-engine
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-bpmn-server/go.mod
+          cache: true
+          cache-dependency-path: go-bpmn-server/go.sum
+
+      - name: Set version
+        id: version
+        run: |
+          DATE=$(date -u +%Y%m%d)
+          SHORT_SHA=$(cd go-bpmn-server && git rev-parse --short HEAD)
+          VERSION="v${DATE}.${GITHUB_RUN_NUMBER}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build binaries
+        working-directory: go-bpmn-server
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CGO_ENABLED: "0"
+        run: |
+          platforms=(
+            "linux/amd64"
+            "linux/arm64"
+            "darwin/amd64"
+            "darwin/arm64"
+          )
+          mkdir -p dist
+          for platform in "${platforms[@]}"; do
+            GOOS="${platform%/*}"
+            GOARCH="${platform#*/}"
+            output="dist/go-bpmn-server_${GOOS}_${GOARCH}"
+            echo "Building ${GOOS}/${GOARCH}..."
+            GOOS="$GOOS" GOARCH="$GOARCH" go build \
+              -ldflags="-s -w -X main.version=${VERSION}" \
+              -o "${output}" \
+              ./cmd/server
+          done
+
+      - name: Bundle archives
+        working-directory: go-bpmn-server
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          platforms=(
+            "linux/amd64"
+            "linux/arm64"
+            "darwin/amd64"
+            "darwin/arm64"
+          )
+          mkdir -p dist/archives
+          for platform in "${platforms[@]}"; do
+            GOOS="${platform%/*}"
+            GOARCH="${platform#*/}"
+            binary="dist/go-bpmn-server_${GOOS}_${GOARCH}"
+            archive="dist/archives/go-bpmn-server_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
+            tar -czf "${archive}" \
+              -C dist "go-bpmn-server_${GOOS}_${GOARCH}" \
+              -C .. README.md .env.example
+            echo "Created ${archive}"
+          done
+
+      - name: Create GitHub release
+        working-directory: go-bpmn-server
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHORT_SHA: ${{ steps.version.outputs.short_sha }}
+        run: |
+          gh release create "${VERSION}" \
+            --title "Release ${VERSION} (${SHORT_SHA})" \
+            --notes "$(cat <<EOF
+          ## go-bpmn-server ${VERSION}
+
+          Built from commit \`${SHORT_SHA}\` on $(date -u +%Y-%m-%d).
+
+          ### Quick start
+
+          1. Download the binary for your platform
+          2. Copy \`.env.example\` to \`.env\` and fill in your values
+          3. Run: \`DATABASE_URL=... ./go-bpmn-server\`
+
+          See [README.md](https://github.com/cosmin-harangus/go-bpmn-server/blob/main/README.md) for full setup instructions.
+          EOF
+          )" \
+            dist/archives/*.tar.gz
