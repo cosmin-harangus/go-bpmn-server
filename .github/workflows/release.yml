@@ -26,10 +26,12 @@ jobs:
 
       - name: Set version
         id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
-          # Find the latest semver tag; default to v0.0.0 if none exists
-          LATEST=$(git tag --list 'v*.*.*' --sort=-version:refname | head -1)
+          # Query GitHub API for the latest release tag (authoritative, includes API-created tags)
+          LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
           if [ -z "$LATEST" ]; then
             LATEST="v0.0.0"
           fi
