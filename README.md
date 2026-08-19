@@ -34,7 +34,11 @@ Migrations are applied automatically on startup.
 
 All requests require an `X-Tenant-ID` header.
 
-### Deploy a process
+### Processes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/processes` | Deploy a BPMN 2.0 XML process definition |
 
 ```
 POST /processes
@@ -44,70 +48,87 @@ X-Tenant-ID: my-tenant
 <body: BPMN 2.0 XML>
 ```
 
-### Create and run an instance
+### Instances
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/instances` | List instances (`state`, `process_key`, `limit`, `offset`) |
+| `POST` | `/instances` | Create and run an instance |
+| `GET`  | `/instances/{id}` | Get instance detail with current tokens |
+| `POST` | `/instances/{id}/run` | Resume execution of an existing instance |
+| `POST` | `/instances/{id}/cancel` | Cancel a running instance |
+| `POST` | `/instances/{id}/suspend` | Suspend a running instance |
+| `POST` | `/instances/{id}/resume` | Resume a suspended instance |
 
 ```
 POST /instances
 X-Tenant-ID: my-tenant
 
-{
-  "process_key": "my-process",
-  "variables": { "orderId": "123" }
-}
+{ "process_key": "my-process", "variables": { "orderId": "123" } }
 ```
 
-### Run an existing instance
+### Jobs (service tasks)
 
-```
-POST /instances/{id}/run
-X-Tenant-ID: my-tenant
-```
-
-### Complete a job (service task)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/jobs/{id}/complete` | Complete a job with output variables |
+| `POST` | `/jobs/{id}/fail` | Fail a job, decrement retries |
 
 ```
 POST /jobs/{id}/complete
 X-Tenant-ID: my-tenant
 
-{
-  "variables": { "result": "ok" }
-}
+{ "variables": { "result": "ok" } }
 ```
-
-### Fail a job
 
 ```
 POST /jobs/{id}/fail
 X-Tenant-ID: my-tenant
 
-{
-  "retries": 2,
-  "message": "upstream timeout"
-}
+{ "retries": 2, "message": "upstream timeout" }
 ```
 
-### Complete a user task
+### User tasks
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/user-tasks` | List user tasks (`state`, `assignee`, `candidate_group`, `process_key`, `instance_id`, `limit`, `offset`) |
+| `POST` | `/user-tasks/{id}/complete` | Complete a user task with output variables |
+| `POST` | `/user-tasks/{id}/claim` | Claim a task for a user |
+| `POST` | `/user-tasks/{id}/unclaim` | Remove the task assignee |
 
 ```
-POST /user-tasks/{id}/complete
+POST /user-tasks/{id}/claim
 X-Tenant-ID: my-tenant
 
-{
-  "variables": { "approved": true }
-}
+{ "user_id": "alice" }
 ```
 
-### Publish a message
+### Incidents
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/incidents` | List incidents (`state`, `instance_id`, `limit`, `offset`) |
+| `POST` | `/incidents/{id}/resolve` | Resolve an incident, retry job with new retries/variables |
+
+```
+POST /incidents/{id}/resolve
+X-Tenant-ID: my-tenant
+
+{ "retries": 3, "variables": { "fixedInput": true } }
+```
+
+### Messages
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/messages` | Publish a message to correlate with waiting instances |
 
 ```
 POST /messages
 X-Tenant-ID: my-tenant
 
-{
-  "message_name": "OrderReceived",
-  "correlation_key": "order-123",
-  "variables": { "amount": 99.99 }
-}
+{ "message_name": "OrderReceived", "correlation_key": "order-123", "variables": { "amount": 99.99 } }
 ```
 
 ## Building

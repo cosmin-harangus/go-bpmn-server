@@ -9,6 +9,7 @@ import (
 
 	"github.com/cosmin-harangus/go-bpmn-engine/engine"
 	pgstore "github.com/cosmin-harangus/go-bpmn-engine/store/pg"
+	"github.com/cosmin-harangus/go-bpmn-engine/store"
 	"github.com/cosmin-harangus/go-bpmn-engine/timer"
 	bpmnserver "github.com/cosmin-harangus/go-bpmn-server/server"
 )
@@ -32,6 +33,26 @@ func (a *engineAdapter) RunInstance(ctx context.Context, instanceID string) erro
 	return a.eng.RunInstance(ctx, instanceID)
 }
 
+func (a *engineAdapter) ListInstances(ctx context.Context, query store.InstanceQuery) ([]store.ProcessInstance, int, error) {
+	return a.eng.ListInstances(ctx, query)
+}
+
+func (a *engineAdapter) GetInstanceDetail(ctx context.Context, instanceID string) (*store.InstanceDetail, error) {
+	return a.eng.GetInstanceDetail(ctx, instanceID)
+}
+
+func (a *engineAdapter) CancelInstance(ctx context.Context, instanceID string) error {
+	return a.eng.CancelInstance(ctx, instanceID)
+}
+
+func (a *engineAdapter) SuspendInstance(ctx context.Context, instanceID string) error {
+	return a.eng.SuspendInstance(ctx, instanceID)
+}
+
+func (a *engineAdapter) ResumeInstance(ctx context.Context, instanceID string) error {
+	return a.eng.ResumeInstance(ctx, instanceID)
+}
+
 func (a *engineAdapter) CompleteJob(ctx context.Context, jobID string, vars map[string]any) error {
 	return a.eng.CompleteJob(ctx, jobID, vars)
 }
@@ -42,6 +63,26 @@ func (a *engineAdapter) FailJob(ctx context.Context, jobID string, retries int, 
 
 func (a *engineAdapter) CompleteUserTask(ctx context.Context, taskID string, vars map[string]any) error {
 	return a.eng.CompleteUserTask(ctx, taskID, vars)
+}
+
+func (a *engineAdapter) ListUserTasks(ctx context.Context, query store.UserTaskQuery) ([]store.UserTask, int, error) {
+	return a.eng.ListUserTasks(ctx, query)
+}
+
+func (a *engineAdapter) ClaimTask(ctx context.Context, taskID, userID string) error {
+	return a.eng.ClaimTask(ctx, taskID, userID)
+}
+
+func (a *engineAdapter) UnclaimTask(ctx context.Context, taskID string) error {
+	return a.eng.UnclaimTask(ctx, taskID)
+}
+
+func (a *engineAdapter) ListIncidents(ctx context.Context, query store.IncidentQuery) ([]store.Incident, int, error) {
+	return a.eng.ListIncidents(ctx, query)
+}
+
+func (a *engineAdapter) ResolveIncident(ctx context.Context, incidentID string, retries int, vars map[string]any) error {
+	return a.eng.ResolveIncident(ctx, incidentID, retries, vars)
 }
 
 func (a *engineAdapter) PublishMessage(ctx context.Context, messageName, correlationKey string, vars map[string]any) error {
