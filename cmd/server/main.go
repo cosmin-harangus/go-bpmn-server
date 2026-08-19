@@ -8,8 +8,8 @@ import (
 	"syscall"
 
 	"github.com/cosmin-harangus/go-bpmn-engine/engine"
-	pgstore "github.com/cosmin-harangus/go-bpmn-engine/store/pg"
 	"github.com/cosmin-harangus/go-bpmn-engine/store"
+	pgstore "github.com/cosmin-harangus/go-bpmn-engine/store/pg"
 	"github.com/cosmin-harangus/go-bpmn-engine/timer"
 	bpmnserver "github.com/cosmin-harangus/go-bpmn-server/server"
 )
