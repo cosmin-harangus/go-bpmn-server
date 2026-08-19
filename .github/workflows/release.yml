@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
 
       - uses: actions/setup-go@v5
         with:
@@ -25,9 +27,21 @@ jobs:
       - name: Set version
         id: version
         run: |
-          DATE=$(date -u +%Y%m%d)
           SHORT_SHA=$(git rev-parse --short HEAD)
-          VERSION="v${DATE}.${GITHUB_RUN_NUMBER}"
+          # Find the latest semver tag; default to v0.0.0 if none exists
+          LATEST=$(git tag --list 'v*.*.*' --sort=-version:refname | head -1)
+          if [ -z "$LATEST" ]; then
+            LATEST="v0.0.0"
+          fi
+          # Strip leading 'v' and split
+          VERSION_CORE="${LATEST#v}"
+          MAJOR="${VERSION_CORE%%.*}"
+          REST="${VERSION_CORE#*.}"
+          MINOR="${REST%%.*}"
+          PATCH="${REST##*.}"
+          # Bump patch
+          PATCH=$((PATCH + 1))
+          VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
