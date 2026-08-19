@@ -3,7 +3,7 @@ module github.com/cosmin-harangus/go-bpmn-server
 go 1.26.0
 
 require (
-	github.com/cosmin-harangus/go-bpmn-engine v0.0.0
+	github.com/cosmin-harangus/go-bpmn-engine v0.0.1
 	github.com/go-chi/chi/v5 v5.3.1
 )
 
@@ -26,5 +26,3 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
-
-replace github.com/cosmin-harangus/go-bpmn-engine => ../go-bpmn-engine

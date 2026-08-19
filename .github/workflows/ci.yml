@@ -14,22 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: go-bpmn-server
-
-      - uses: actions/checkout@v4
-        with:
-          repository: cosmin-harangus/go-bpmn-engine
-          path: go-bpmn-engine
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go-bpmn-server/go.mod
+          go-version-file: go.mod
           cache: true
-          cache-dependency-path: go-bpmn-server/go.sum
+
+      - name: Configure private module access
+        run: git config --global url."https://${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Check formatting
-        working-directory: go-bpmn-server
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
@@ -39,34 +33,26 @@ jobs:
           fi
 
       - name: go vet
-        working-directory: go-bpmn-server
-        run: go vet ./...
+        run: GOPRIVATE=github.com/cosmin-harangus/go-bpmn-engine go vet ./...
 
       - name: staticcheck
-        working-directory: go-bpmn-server
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...
+          GOPRIVATE=github.com/cosmin-harangus/go-bpmn-engine staticcheck ./...
 
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: go-bpmn-server
-
-      - uses: actions/checkout@v4
-        with:
-          repository: cosmin-harangus/go-bpmn-engine
-          path: go-bpmn-engine
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go-bpmn-server/go.mod
+          go-version-file: go.mod
           cache: true
-          cache-dependency-path: go-bpmn-server/go.sum
+
+      - name: Configure private module access
+        run: git config --global url."https://${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Build
-        working-directory: go-bpmn-server
-        run: go build ./...
+        run: GOPRIVATE=github.com/cosmin-harangus/go-bpmn-engine go build ./...

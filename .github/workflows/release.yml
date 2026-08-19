@@ -13,34 +13,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: go-bpmn-server
-
-      - uses: actions/checkout@v4
-        with:
-          repository: cosmin-harangus/go-bpmn-engine
-          path: go-bpmn-engine
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go-bpmn-server/go.mod
+          go-version-file: go.mod
           cache: true
-          cache-dependency-path: go-bpmn-server/go.sum
+
+      - name: Configure private module access
+        run: git config --global url."https://${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Set version
         id: version
         run: |
           DATE=$(date -u +%Y%m%d)
-          SHORT_SHA=$(cd go-bpmn-server && git rev-parse --short HEAD)
+          SHORT_SHA=$(git rev-parse --short HEAD)
           VERSION="v${DATE}.${GITHUB_RUN_NUMBER}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Build binaries
-        working-directory: go-bpmn-server
         env:
           VERSION: ${{ steps.version.outputs.version }}
           CGO_ENABLED: "0"
+          GOPRIVATE: github.com/cosmin-harangus/go-bpmn-engine
         run: |
           platforms=(
             "linux/amd64"
@@ -61,7 +56,6 @@ jobs:
           done
 
       - name: Bundle archives
-        working-directory: go-bpmn-server
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -84,7 +78,6 @@ jobs:
           done
 
       - name: Create GitHub release
-        working-directory: go-bpmn-server
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
