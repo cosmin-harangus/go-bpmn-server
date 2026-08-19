@@ -1,4 +1,4 @@
-.PHONY: build run fmt fmt-check vet
+.PHONY: build run fmt fmt-check vet test-e2e
 
 build:
 	go build ./...
@@ -14,3 +14,6 @@ fmt-check:
 
 vet:
 	go vet ./...
+
+test-e2e:
+	TESTCONTAINERS_RYUK_DISABLED=true go test -tags e2e ./... -timeout 600s

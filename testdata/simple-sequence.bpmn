@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             targetNamespace="http://example.com">
+  <process id="simple-sequence" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="sf1" sourceRef="start" targetRef="task1"/>
+    <serviceTask id="task1" name="Double Amount"/>
+    <sequenceFlow id="sf2" sourceRef="task1" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>

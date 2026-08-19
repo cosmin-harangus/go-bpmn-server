@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" targetNamespace="http://example.com">
+  <message id="msg1" name="OrderPlaced"/>
+  <process id="message-catch-process" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="sf1" sourceRef="start" targetRef="msg-wait"/>
+    <intermediateCatchEvent id="msg-wait">
+      <messageEventDefinition messageRef="msg1"/>
+    </intermediateCatchEvent>
+    <sequenceFlow id="sf2" sourceRef="msg-wait" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>
