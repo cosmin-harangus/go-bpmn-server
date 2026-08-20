@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bpmn
+      POSTGRES_USER: bpmn
+      POSTGRES_PASSWORD: bpmn
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bpmn -d bpmn"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  server:
+    build:
+      context: .
+      secrets:
+        - github_token
+    environment:
+      DATABASE_URL: postgres://bpmn:bpmn@postgres:5432/bpmn?sslmode=disable
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN
+
+volumes:
+  pgdata:
