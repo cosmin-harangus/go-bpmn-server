@@ -10,9 +10,10 @@ import (
 )
 
 type Server struct {
-	engine Engine
-	addr   string
-	srv    *http.Server
+	engine   Engine
+	addr     string
+	srv      *http.Server
+	webhooks map[string]WebhookConfig
 }
 
 // Engine is the subset of engine.Engine used by the server.
@@ -48,40 +49,47 @@ type Engine interface {
 }
 
 func New(e Engine, addr string) *Server {
-	s := &Server{engine: e, addr: addr}
+	s := &Server{engine: e, addr: addr, webhooks: make(map[string]WebhookConfig)}
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
-	r.Use(TenantFromHeader)
 
-	// Processes
-	r.Post("/processes", s.handleDeployProcess)
+	// Webhooks bypass TenantFromHeader — tenant comes from WebhookConfig.
+	r.Post("/webhooks/{name}", s.handleWebhook)
 
-	// Instances
-	r.Get("/instances", s.handleListInstances)
-	r.Post("/instances", s.handleCreateInstance)
-	r.Get("/instances/{id}", s.handleGetInstance)
-	r.Post("/instances/{id}/run", s.handleRunInstance)
-	r.Post("/instances/{id}/cancel", s.handleCancelInstance)
-	r.Post("/instances/{id}/suspend", s.handleSuspendInstance)
-	r.Post("/instances/{id}/resume", s.handleResumeInstance)
+	// All other routes require X-Tenant-ID.
+	r.Group(func(r chi.Router) {
+		r.Use(TenantFromHeader)
 
-	// Jobs
-	r.Post("/jobs/{id}/complete", s.handleCompleteJob)
-	r.Post("/jobs/{id}/fail", s.handleFailJob)
+		// Processes
+		r.Post("/processes", s.handleDeployProcess)
 
-	// User tasks
-	r.Get("/user-tasks", s.handleListUserTasks)
-	r.Post("/user-tasks/{id}/complete", s.handleCompleteUserTask)
-	r.Post("/user-tasks/{id}/claim", s.handleClaimTask)
-	r.Post("/user-tasks/{id}/unclaim", s.handleUnclaimTask)
+		// Instances
+		r.Get("/instances", s.handleListInstances)
+		r.Post("/instances", s.handleCreateInstance)
+		r.Get("/instances/{id}", s.handleGetInstance)
+		r.Post("/instances/{id}/run", s.handleRunInstance)
+		r.Post("/instances/{id}/cancel", s.handleCancelInstance)
+		r.Post("/instances/{id}/suspend", s.handleSuspendInstance)
+		r.Post("/instances/{id}/resume", s.handleResumeInstance)
 
-	// Incidents
-	r.Get("/incidents", s.handleListIncidents)
-	r.Post("/incidents/{id}/resolve", s.handleResolveIncident)
+		// Jobs
+		r.Post("/jobs/{id}/complete", s.handleCompleteJob)
+		r.Post("/jobs/{id}/fail", s.handleFailJob)
 
-	// Messages
-	r.Post("/messages", s.handlePublishMessage)
+		// User tasks
+		r.Get("/user-tasks", s.handleListUserTasks)
+		r.Post("/user-tasks/{id}/complete", s.handleCompleteUserTask)
+		r.Post("/user-tasks/{id}/claim", s.handleClaimTask)
+		r.Post("/user-tasks/{id}/unclaim", s.handleUnclaimTask)
+
+		// Incidents
+		r.Get("/incidents", s.handleListIncidents)
+		r.Post("/incidents/{id}/resolve", s.handleResolveIncident)
+
+		// Messages
+		r.Post("/messages", s.handlePublishMessage)
+	})
 
 	s.srv = &http.Server{Addr: addr, Handler: r}
 	return s

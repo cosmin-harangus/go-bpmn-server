@@ -131,6 +131,38 @@ X-Tenant-ID: my-tenant
 { "message_name": "OrderReceived", "correlation_key": "order-123", "variables": { "amount": 99.99 } }
 ```
 
+### Inbound webhooks
+
+Webhooks let external systems (Stripe, GitHub, Twilio, etc.) trigger BPMN messages without needing to send an `X-Tenant-ID` header. The tenant and message mapping are configured in code.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/webhooks/{name}` | Receive an inbound webhook, publish a BPMN message |
+
+Register webhooks after creating the server:
+
+```go
+srv := server.New(eng, ":8080")
+
+srv.RegisterWebhook("stripe", server.WebhookConfig{
+    MessageName:        "PaymentReceived",       // BPMN message to publish
+    TenantID:           "acme",                  // tenant (replaces X-Tenant-ID)
+    CorrelationKeyPath: "data.object.id",        // dot-path into JSON body for correlation key
+    HMACSecret:         os.Getenv("STRIPE_SECRET"), // optional: verify X-Hub-Signature-256
+})
+
+srv.RegisterWebhook("github", server.WebhookConfig{
+    MessageName:        "PushEvent",
+    TenantID:           "acme",
+    CorrelationKeyPath: "repository.full_name",
+    HMACSecret:         os.Getenv("GITHUB_WEBHOOK_SECRET"),
+})
+```
+
+**Signature verification:** When `HMACSecret` is set, the request must include an `X-Hub-Signature-256: sha256=<hex>` header. This is the same format used by GitHub, Stripe, and most webhook providers. Requests with missing or invalid signatures are rejected with `401`.
+
+**Correlation key extraction:** `CorrelationKeyPath` is a dot-separated path into the JSON body (e.g. `"data.object.id"` extracts `ch_123` from `{"data":{"object":{"id":"ch_123"}}}`). The entire body is forwarded as process variables.
+
 ## Building
 
 ```bash
