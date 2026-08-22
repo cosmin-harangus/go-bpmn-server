@@ -10,10 +10,22 @@ import (
 )
 
 type Server struct {
-	engine   Engine
-	addr     string
-	srv      *http.Server
-	webhooks map[string]WebhookConfig
+	engine            Engine
+	addr              string
+	srv               *http.Server
+	webhooks          map[string]WebhookConfig
+	enforceWebhookSig bool
+}
+
+// Option configures a Server.
+type Option func(*Server)
+
+// WithWebhookVerification controls whether webhook signature verification is
+// enforced. When true (the default), requests with a nil Verifier or a failing
+// Verifier are rejected with 401. Set to false in tests or local development
+// to allow unverified webhooks.
+func WithWebhookVerification(enforce bool) Option {
+	return func(s *Server) { s.enforceWebhookSig = enforce }
 }
 
 // Engine is the subset of engine.Engine used by the server.
@@ -48,8 +60,11 @@ type Engine interface {
 	PublishMessage(ctx context.Context, messageName, correlationKey string, vars map[string]any) error
 }
 
-func New(e Engine, addr string) *Server {
-	s := &Server{engine: e, addr: addr, webhooks: make(map[string]WebhookConfig)}
+func New(e Engine, addr string, opts ...Option) *Server {
+	s := &Server{engine: e, addr: addr, webhooks: make(map[string]WebhookConfig), enforceWebhookSig: true}
+	for _, o := range opts {
+		o(s)
+	}
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)

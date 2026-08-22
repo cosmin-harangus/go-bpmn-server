@@ -85,8 +85,15 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verification is mandatory — reject if no verifier is configured or verification fails.
-	if cfg.Verifier == nil || !cfg.Verifier.Verify(r, body) {
+	// Verify signature when enforcement is enabled (default in production).
+	// When enforcement is disabled (e.g. local dev/tests), a nil Verifier skips
+	// verification; a non-nil Verifier is still applied.
+	if s.enforceWebhookSig {
+		if cfg.Verifier == nil || !cfg.Verifier.Verify(r, body) {
+			writeError(w, 401, "invalid signature")
+			return
+		}
+	} else if cfg.Verifier != nil && !cfg.Verifier.Verify(r, body) {
 		writeError(w, 401, "invalid signature")
 		return
 	}

@@ -73,10 +73,10 @@ func (m *mockEngine) PublishMessage(ctx context.Context, name, key string, vars 
 	return nil
 }
 
-func setupWebhookServer(t *testing.T) (*bpmnserver.Server, *mockEngine) {
+func setupWebhookServer(t *testing.T, opts ...bpmnserver.Option) (*bpmnserver.Server, *mockEngine) {
 	t.Helper()
 	eng := &mockEngine{}
-	srv := bpmnserver.New(eng, ":0")
+	srv := bpmnserver.New(eng, ":0", opts...)
 	return srv, eng
 }
 
@@ -85,12 +85,6 @@ func signHMAC(body []byte, secret string) string {
 	mac.Write(body)
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
-
-// alwaysAllow is a SignatureVerifier that accepts every request — useful in tests
-// that focus on routing/payload behaviour, not authentication.
-type alwaysAllow struct{}
-
-func (alwaysAllow) Verify(_ *http.Request, _ []byte) bool { return true }
 
 // headerVerifier checks a custom header value — demonstrates pluggable verifiers.
 type headerVerifier struct{ header, value string }
@@ -114,12 +108,13 @@ func TestWebhook_NotFound(t *testing.T) {
 	}
 }
 
-func TestWebhook_NilVerifierRejected(t *testing.T) {
+func TestWebhook_NilVerifier_EnforcedRejected(t *testing.T) {
+	// Default: enforcement on — nil verifier must be rejected.
 	srv, _ := setupWebhookServer(t)
 	srv.RegisterWebhook("unsafe", bpmnserver.WebhookConfig{
 		MessageName: "Event",
 		TenantID:    "acme",
-		Verifier:    nil, // no verifier — must be rejected
+		Verifier:    nil,
 	})
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
@@ -130,17 +125,40 @@ func TestWebhook_NilVerifierRejected(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 401 {
-		t.Errorf("expected 401 for nil verifier, got %d", resp.StatusCode)
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestWebhook_NilVerifier_NotEnforcedAllowed(t *testing.T) {
+	// Enforcement off — nil verifier skips verification (useful in tests/local dev).
+	srv, eng := setupWebhookServer(t, bpmnserver.WithWebhookVerification(false))
+	srv.RegisterWebhook("dev", bpmnserver.WebhookConfig{
+		MessageName: "DevEvent",
+		TenantID:    "acme",
+		Verifier:    nil,
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/webhooks/dev", "application/json", bytes.NewReader([]byte(`{"x":1}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 204 {
+		t.Errorf("expected 204, got %d", resp.StatusCode)
+	}
+	if len(eng.publishedMessages) != 1 {
+		t.Errorf("expected 1 message, got %d", len(eng.publishedMessages))
 	}
 }
 
 func TestWebhook_PublishesMessage(t *testing.T) {
-	srv, eng := setupWebhookServer(t)
+	srv, eng := setupWebhookServer(t, bpmnserver.WithWebhookVerification(false))
 	srv.RegisterWebhook("stripe", bpmnserver.WebhookConfig{
 		MessageName:        "PaymentReceived",
 		TenantID:           "acme",
 		CorrelationKeyPath: "data.object.id",
-		Verifier:           alwaysAllow{},
 	})
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
@@ -168,11 +186,10 @@ func TestWebhook_PublishesMessage(t *testing.T) {
 }
 
 func TestWebhook_NoCorrelationKey(t *testing.T) {
-	srv, eng := setupWebhookServer(t)
+	srv, eng := setupWebhookServer(t, bpmnserver.WithWebhookVerification(false))
 	srv.RegisterWebhook("notify", bpmnserver.WebhookConfig{
 		MessageName: "GenericEvent",
 		TenantID:    "acme",
-		Verifier:    alwaysAllow{},
 	})
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
@@ -294,11 +311,10 @@ func TestWebhook_CustomVerifier(t *testing.T) {
 }
 
 func TestWebhook_InvalidJSON(t *testing.T) {
-	srv, _ := setupWebhookServer(t)
+	srv, _ := setupWebhookServer(t, bpmnserver.WithWebhookVerification(false))
 	srv.RegisterWebhook("test", bpmnserver.WebhookConfig{
 		MessageName: "Event",
 		TenantID:    "acme",
-		Verifier:    alwaysAllow{},
 	})
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
@@ -315,12 +331,11 @@ func TestWebhook_InvalidJSON(t *testing.T) {
 }
 
 func TestWebhook_EngineError(t *testing.T) {
-	srv, eng := setupWebhookServer(t)
+	srv, eng := setupWebhookServer(t, bpmnserver.WithWebhookVerification(false))
 	eng.publishErr = fmt.Errorf("no subscription found")
 	srv.RegisterWebhook("test", bpmnserver.WebhookConfig{
 		MessageName: "Event",
 		TenantID:    "acme",
-		Verifier:    alwaysAllow{},
 	})
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
@@ -343,12 +358,11 @@ func TestWebhook_EngineError(t *testing.T) {
 }
 
 func TestWebhook_NestedCorrelationPath(t *testing.T) {
-	srv, eng := setupWebhookServer(t)
+	srv, eng := setupWebhookServer(t, bpmnserver.WithWebhookVerification(false))
 	srv.RegisterWebhook("deep", bpmnserver.WebhookConfig{
 		MessageName:        "DeepEvent",
 		TenantID:           "acme",
 		CorrelationKeyPath: "a.b.c",
-		Verifier:           alwaysAllow{},
 	})
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
