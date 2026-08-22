@@ -7,7 +7,7 @@
 
 ## Goal
 
-Built-in auth by default, pluggable by config. Self-hosters get a working JWT-based auth out of the box. Companies that want Kratos, Keycloak, or Auth0 swap it in via one env var — zero code changes.
+Built-in auth by default, pluggable by config. Self-hosters get a working JWT-based auth out of the box. Companies that want Clerk, Auth0, Zitadel, Keycloak, or any other OIDC-compliant provider swap it in via two env vars — zero code changes, no proxy, no sidecar.
 
 ---
 
@@ -16,7 +16,7 @@ Built-in auth by default, pluggable by config. Self-hosters get a working JWT-ba
 - The "tenant" is an organization/account, not an individual user
 - Multiple users belong to one account
 - `tenant_id` lives in the JWT claim — never trusted from a raw request header
-- API requests authenticated via JWT or API key, both of which carry `tenant_id`
+- API requests authenticated via JWT (`Authorization: Bearer <jwt>`) or API key (`Authorization: Bearer apk_...`)
 - The existing `X-Tenant-ID` header is removed or demoted to internal/dev use only
 
 ---
@@ -36,60 +36,67 @@ type Authenticator interface {
 
 ---
 
-## Implementations
+## Two Modes
 
-### Built-in (default)
+### Mode 1 — Built-in (default)
 
-Package: `server/auth/builtin/`
+~300 lines of Go in the server itself. No new services or dependencies beyond the existing PostgreSQL.
 
-- `POST /auth/login` — email+password → signed JWT with `user_id` + `tenant_id` claims
-- JWT validated on every protected request via middleware
-- Users and accounts stored in PostgreSQL (new `accounts` and `users` tables)
-- Passwords hashed with bcrypt
-- API keys stored in DB (`api_keys` table), associated with `tenant_id`; validated via `Authorization: Bearer apk_...` header
-- Phase 1: admin creates users via CLI seed or admin endpoint (no self-registration UI)
+**New DB tables** (same database, new migration):
+- `accounts` — one row per tenant (`id`, `name`, `created_at`)
+- `users` — one row per user (`id`, `account_id`, `email`, `password_hash`, `role`, `created_at`)
+- `api_keys` — (`id`, `key_hash`, `account_id`, `label`, `created_at`)
 
-### Forward auth (external providers)
+**Endpoints added to the server:**
+- `POST /auth/login` — email+password → signs a JWT with `{ user_id, tenant_id }` claims using `AUTH_JWT_SECRET`
 
-Package: `server/auth/forward/`
+**Middleware behavior:**
+1. Check `Authorization` header
+2. If `Bearer apk_...` → look up key hash in DB, resolve `tenant_id`
+3. If `Bearer <jwt>` → validate signature with `AUTH_JWT_SECRET`, read `tenant_id` from claims
+4. Inject `tenant_id` and `user_id` into context
 
-- Delegates to an external service via the [forward auth pattern](https://doc.traefik.io/traefik/middlewares/http/forwardauth/)
-- Makes a subrequest to `AUTH_FORWARD_URL`; 2xx = proceed, 401/403 = reject
-- `tenant_id` and `user_id` extracted from response headers (configurable)
-- Compatible with: ORY Kratos+Oathkeeper, Keycloak, Authelia, Auth0
+**Phase 1:** admin creates accounts and users via a CLI command or seed migration. No self-registration UI.
 
 ---
 
-## ORY Stack for Multi-User Accounts
+### Mode 2 — OIDC (external providers)
 
-When using ORY, the recommended stack is:
+Validate standard OIDC JWTs locally. On startup, fetch the provider's public keys from `{OIDC_ISSUER_URL}/.well-known/jwks.json` and cache them. No proxy, no sidecar, no subrequests per API call.
 
-| Component | Role |
-|---|---|
-| **Kratos** | Identity management — login, registration, profile, sessions |
-| **Hydra** | OAuth 2.0 / OIDC server — issues JWTs with custom claims |
-| **Keto** | Permissions / RBAC — "user X is admin of account Y" |
-| **Oathkeeper** | Identity-aware proxy — forward auth sidecar |
+**Middleware behavior:**
+1. Validate JWT signature against cached JWKS (refresh keys on 401 from provider)
+2. Read `tenant_id` from the claim named by `AUTH_TENANT_CLAIM`
+3. Read `user_id` from the `sub` claim (standard) or configurable `AUTH_USER_CLAIM`
+4. Inject into context — identical to built-in mode
 
-Kratos does **not** have a native organization/account concept in OSS. The pattern:
+**Compatible with any OIDC provider:**
 
-1. Store `tenant_id` (account ID) in Kratos identity metadata (`traits` or `metadata_public`)
-2. On login, Kratos issues a session token
-3. Oathkeeper intercepts requests, validates session, extracts identity metadata, forwards `X-Tenant-ID` + `X-User-ID` headers to your server
-4. Alternatively: a thin "token exchange" endpoint in your server converts a Kratos session to a JWT with `tenant_id` claim
+| Provider | Multi-user accounts | Notes |
+|---|---|---|
+| **Clerk** | "Organizations" | Best choice for SaaS phase — managed, free to 10K MAU, includes invite UI |
+| **Zitadel** | "Organizations" | Best OSS self-hosted recommendation — single binary, OIDC-native |
+| **Auth0** | "Organizations" | Managed; organizations in paid tier |
+| **Keycloak** | "Realms" / "Groups" | OSS, heavy JVM dependency |
+| **Supabase Auth** | Custom JWT claims | Managed Postgres-native; manual org claim |
+| **Google Workspace** | `hd` claim = domain | Simple for internal/single-org deployments |
 
-For full OAuth 2.0 (API key equivalent, machine-to-machine): add Hydra. It issues tokens with `tenant_id` in the claims via custom token hooks.
+**API keys in OIDC mode:** handled by your built-in DB layer regardless of auth mode. API key validation is always local — OIDC is only for human user sessions.
 
 ---
 
 ## Config
 
 ```
-AUTH_MODE=builtin           # or "forward"
-AUTH_JWT_SECRET=...         # required for builtin
-AUTH_FORWARD_URL=...        # required for forward
-AUTH_TENANT_HEADER=X-Tenant-ID   # header name carrying tenant_id (forward mode)
-AUTH_USER_HEADER=X-User-ID       # header name carrying user_id (forward mode)
+AUTH_MODE=builtin            # or "oidc"
+
+# Required for builtin
+AUTH_JWT_SECRET=...
+
+# Required for oidc
+OIDC_ISSUER_URL=https://your-provider.com
+AUTH_TENANT_CLAIM=org_id     # claim name that holds the tenant/account ID
+AUTH_USER_CLAIM=sub          # claim name for user ID (default: sub)
 ```
 
 ---
@@ -98,16 +105,29 @@ AUTH_USER_HEADER=X-User-ID       # header name carrying user_id (forward mode)
 
 - `New()` gains an `Authenticator` parameter
 - Auth middleware registered after recovery, before all protected routes
-- `TenantFromHeader` middleware replaced by auth middleware (tenant comes from JWT, not raw header)
+- `TenantFromHeader` middleware replaced by auth middleware (`tenant_id` comes from JWT, not raw header)
 - No handler changes
 
 ---
 
 ## Security properties
 
-- No request can set an arbitrary tenant_id — it is always derived from a verified JWT or API key
-- API keys are prefixed (`apk_`) to distinguish from JWTs; scoped to a single tenant
-- Forward auth mode: trust is delegated to the external provider; your server never sees credentials
+- No request can set an arbitrary `tenant_id` — always derived from a verified JWT or API key
+- API keys are prefixed (`apk_`) and stored as hashes; scoped to a single tenant
+- OIDC mode: your server never sees user credentials; JWT signature is verified against provider's published public keys
+- Built-in mode: passwords are bcrypt-hashed; JWT secret never leaves the server
+
+---
+
+## Provider recommendations by deployment scenario
+
+| Scenario | Recommendation |
+|---|---|
+| SaaS (you host it) | Clerk — managed orgs, invite flows, no infra |
+| Self-hosted, want OSS auth | Zitadel — single binary, OIDC-native, organizations built-in |
+| Self-hosted, already running Keycloak | Keycloak via OIDC mode |
+| Self-hosted, no auth infra | Built-in (default) |
+| Internal single-org deployment | Built-in or Google Workspace OIDC |
 
 ---
 
@@ -115,4 +135,4 @@ AUTH_USER_HEADER=X-User-ID       # header name carrying user_id (forward mode)
 
 1. Should the built-in support user self-registration, or admin-only user creation in Phase 1?
 2. Should API keys be per-user or per-account (tenant)?
-3. Multi-account membership: can a user belong to more than one tenant? (Affects JWT design — single `tenant_id` claim vs. array)
+3. Can a user belong to more than one tenant? (Affects JWT design — single `tenant_id` claim vs. array; OIDC providers handle this differently)
