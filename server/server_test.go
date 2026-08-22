@@ -17,6 +17,7 @@ import (
 	pgstore "github.com/cosmin-harangus/go-bpmn-engine/store/pg"
 	"github.com/cosmin-harangus/go-bpmn-engine/tenant"
 	bpmnserver "github.com/cosmin-harangus/go-bpmn-server/server"
+	"github.com/cosmin-harangus/go-bpmn-server/server/auth/noauth"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
@@ -127,7 +128,7 @@ func setup(t *testing.T) *testEnv {
 		t.Fatal(err)
 	}
 
-	srv := bpmnserver.New(&engineAdapter{eng: eng}, ":0")
+	srv := bpmnserver.New(&engineAdapter{eng: eng}, ":0", bpmnserver.WithAuthenticator(&noauth.NoAuth{}))
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
