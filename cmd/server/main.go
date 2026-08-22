@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -12,6 +13,9 @@ import (
 	pgstore "github.com/cosmin-harangus/go-bpmn-engine/store/pg"
 	"github.com/cosmin-harangus/go-bpmn-engine/timer"
 	bpmnserver "github.com/cosmin-harangus/go-bpmn-server/server"
+	"github.com/cosmin-harangus/go-bpmn-server/server/auth"
+	"github.com/cosmin-harangus/go-bpmn-server/server/auth/noauth"
+	"github.com/cosmin-harangus/go-bpmn-server/server/auth/oidc"
 )
 
 // engineAdapter wraps *engine.Engine to satisfy bpmnserver.Engine.
@@ -89,6 +93,33 @@ func (a *engineAdapter) PublishMessage(ctx context.Context, messageName, correla
 	return a.eng.PublishMessage(ctx, messageName, correlationKey, vars)
 }
 
+func buildAuthenticator() (auth.Authenticator, error) {
+	switch os.Getenv("AUTH_MODE") {
+	case "oidc":
+		issuer := os.Getenv("OIDC_ISSUER_URL")
+		if issuer == "" {
+			return nil, fmt.Errorf("OIDC_ISSUER_URL is required when AUTH_MODE=oidc")
+		}
+		return oidc.New(oidc.Config{
+			IssuerURL:   issuer,
+			TenantClaim: envOr("AUTH_TENANT_CLAIM", "org_id"),
+			UserClaim:   envOr("AUTH_USER_CLAIM", "sub"),
+		}, nil)
+	default:
+		// "noauth" or empty — trust X-Tenant-ID header directly.
+		// For production use, set AUTH_MODE=oidc or AUTH_MODE=builtin.
+		slog.Warn("AUTH_MODE not set: running in no-auth mode — do not use in production")
+		return &noauth.NoAuth{}, nil
+	}
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
 func main() {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
@@ -132,7 +163,13 @@ func main() {
 		}
 	}()
 
-	srv := bpmnserver.New(&engineAdapter{eng: eng}, ":"+addr)
+	authenticator, err := buildAuthenticator()
+	if err != nil {
+		slog.Error("auth init failed", "error", err)
+		os.Exit(1)
+	}
+
+	srv := bpmnserver.New(&engineAdapter{eng: eng}, ":"+addr, bpmnserver.WithAuthenticator(authenticator))
 	slog.Info("starting server", "addr", addr)
 	if err := srv.Start(ctx); err != nil {
 		slog.Error("server error", "error", err)

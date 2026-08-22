@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/cosmin-harangus/go-bpmn-engine/store"
+	"github.com/cosmin-harangus/go-bpmn-server/server/auth"
+	"github.com/cosmin-harangus/go-bpmn-server/server/auth/noauth"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 )
@@ -15,6 +17,7 @@ type Server struct {
 	srv               *http.Server
 	webhooks          map[string]WebhookConfig
 	enforceWebhookSig bool
+	authenticator     auth.Authenticator
 }
 
 // Option configures a Server.
@@ -26,6 +29,12 @@ type Option func(*Server)
 // to allow unverified webhooks.
 func WithWebhookVerification(enforce bool) Option {
 	return func(s *Server) { s.enforceWebhookSig = enforce }
+}
+
+// WithAuthenticator sets the Authenticator used to protect all non-webhook routes.
+// Defaults to noauth (trusts X-Tenant-ID header) if not set.
+func WithAuthenticator(a auth.Authenticator) Option {
+	return func(s *Server) { s.authenticator = a }
 }
 
 // Engine is the subset of engine.Engine used by the server.
@@ -61,7 +70,13 @@ type Engine interface {
 }
 
 func New(e Engine, addr string, opts ...Option) *Server {
-	s := &Server{engine: e, addr: addr, webhooks: make(map[string]WebhookConfig), enforceWebhookSig: true}
+	s := &Server{
+		engine:            e,
+		addr:              addr,
+		webhooks:          make(map[string]WebhookConfig),
+		enforceWebhookSig: true,
+		authenticator:     &noauth.NoAuth{},
+	}
 	for _, o := range opts {
 		o(s)
 	}
@@ -69,12 +84,15 @@ func New(e Engine, addr string, opts ...Option) *Server {
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 
-	// Webhooks bypass TenantFromHeader — tenant comes from WebhookConfig.
+	// Webhooks bypass auth — tenant comes from WebhookConfig.
 	r.Post("/webhooks/{name}", s.handleWebhook)
 
-	// All other routes require X-Tenant-ID.
+	// Public routes from the authenticator (e.g. POST /auth/login).
+	s.authenticator.PublicRoutes(r)
+
+	// All other routes go through the authenticator middleware.
 	r.Group(func(r chi.Router) {
-		r.Use(TenantFromHeader)
+		r.Use(s.authenticator.Middleware())
 
 		// Processes
 		r.Post("/processes", s.handleDeployProcess)
