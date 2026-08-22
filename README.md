@@ -131,6 +131,49 @@ X-Tenant-ID: my-tenant
 { "message_name": "OrderReceived", "correlation_key": "order-123", "variables": { "amount": 99.99 } }
 ```
 
+### Inbound webhooks
+
+Webhooks let external systems (Stripe, GitHub, Twilio, etc.) trigger BPMN messages without needing to send an `X-Tenant-ID` header. The tenant and message mapping are configured in code.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/webhooks/{name}` | Receive an inbound webhook, publish a BPMN message |
+
+Register webhooks after creating the server:
+
+```go
+srv := server.New(eng, ":8080")
+
+// GitHub / Stripe — use the built-in HMACVerifier (X-Hub-Signature-256)
+srv.RegisterWebhook("stripe", server.WebhookConfig{
+    MessageName:        "PaymentReceived",
+    TenantID:           "acme",
+    CorrelationKeyPath: "data.object.id",
+    Verifier:           server.HMACVerifier{Secret: os.Getenv("STRIPE_SECRET")},
+})
+
+// Custom verifier — implement SignatureVerifier for any auth scheme
+srv.RegisterWebhook("internal", server.WebhookConfig{
+    MessageName: "InternalEvent",
+    TenantID:    "acme",
+    Verifier:    myCustomVerifier{},
+})
+```
+
+**Signature verification is mandatory.** Every webhook must have a `Verifier` — requests are rejected with `401` if `Verifier` is nil or verification fails.
+
+Implement `server.SignatureVerifier` for any auth scheme:
+
+```go
+type SignatureVerifier interface {
+    Verify(r *http.Request, body []byte) bool
+}
+```
+
+The built-in `HMACVerifier` checks `X-Hub-Signature-256: sha256=<hex>` (GitHub, Stripe, and most providers).
+
+**Correlation key extraction:** `CorrelationKeyPath` is a dot-separated path into the JSON body (e.g. `"data.object.id"` extracts `ch_123` from `{"data":{"object":{"id":"ch_123"}}}`). The entire body is forwarded as process variables.
+
 ## Building
 
 ```bash
