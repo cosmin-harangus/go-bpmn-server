@@ -26,22 +26,19 @@ jobs:
 
       - name: Set version
         id: version
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
-          # Query GitHub API for the latest release tag (authoritative, includes API-created tags)
-          LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+          # Use local git tags as the authoritative source — already fetched by fetch-tags: true.
+          # This avoids GitHub API lag that caused duplicate-tag races when PRs merged quickly.
+          LATEST=$(git tag -l 'v[0-9]*' --sort=-version:refname | head -1)
           if [ -z "$LATEST" ]; then
             LATEST="v0.0.0"
           fi
-          # Strip leading 'v' and split
           VERSION_CORE="${LATEST#v}"
           MAJOR="${VERSION_CORE%%.*}"
           REST="${VERSION_CORE#*.}"
           MINOR="${REST%%.*}"
           PATCH="${REST##*.}"
-          # Bump patch
           PATCH=$((PATCH + 1))
           VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -99,6 +96,10 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           SHORT_SHA: ${{ steps.version.outputs.short_sha }}
         run: |
+          if gh release view "${VERSION}" &>/dev/null; then
+            echo "Release ${VERSION} already exists — skipping."
+            exit 0
+          fi
           gh release create "${VERSION}" \
             --title "Release ${VERSION} (${SHORT_SHA})" \
             --notes "$(cat <<EOF
