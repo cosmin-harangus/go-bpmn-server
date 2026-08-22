@@ -131,8 +131,8 @@ AUTH_USER_CLAIM=sub          # claim name for user ID (default: sub)
 
 ---
 
-## Open questions (to resolve before implementation)
+## Decisions (resolved before implementation)
 
-1. Should the built-in support user self-registration, or admin-only user creation in Phase 1?
-2. Should API keys be per-user or per-account (tenant)?
-3. Can a user belong to more than one tenant? (Affects JWT design — single `tenant_id` claim vs. array; OIDC providers handle this differently)
+1. **User self-registration:** Admin-only user creation in Phase 1. No self-registration UI.
+2. **API key scope:** Per-account (tenant). One API key grants access to the full tenant, not scoped to a user.
+3. **Multi-tenant membership:** A user belongs to exactly one tenant. Single `tenant_id` claim in JWT. Simplifies everything — no claim arrays, no per-request tenant selection.

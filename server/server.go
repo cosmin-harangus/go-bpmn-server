@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/cosmin-harangus/go-bpmn-engine/store"
+	"github.com/cosmin-harangus/go-bpmn-server/server/auth"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 )
@@ -47,12 +48,16 @@ type Engine interface {
 	PublishMessage(ctx context.Context, messageName, correlationKey string, vars map[string]any) error
 }
 
-func New(e Engine, addr string) *Server {
+func New(e Engine, addr string, authenticator auth.Authenticator) *Server {
 	s := &Server{engine: e, addr: addr}
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
-	r.Use(TenantFromHeader)
+
+	// Register public routes (e.g. login) before the auth middleware.
+	authenticator.PublicRoutes(r)
+
+	r.Use(authenticator.Middleware())
 
 	// Processes
 	r.Post("/processes", s.handleDeployProcess)
