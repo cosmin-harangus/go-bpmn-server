@@ -144,22 +144,33 @@ Register webhooks after creating the server:
 ```go
 srv := server.New(eng, ":8080")
 
+// GitHub / Stripe — use the built-in HMACVerifier (X-Hub-Signature-256)
 srv.RegisterWebhook("stripe", server.WebhookConfig{
-    MessageName:        "PaymentReceived",       // BPMN message to publish
-    TenantID:           "acme",                  // tenant (replaces X-Tenant-ID)
-    CorrelationKeyPath: "data.object.id",        // dot-path into JSON body for correlation key
-    HMACSecret:         os.Getenv("STRIPE_SECRET"), // optional: verify X-Hub-Signature-256
+    MessageName:        "PaymentReceived",
+    TenantID:           "acme",
+    CorrelationKeyPath: "data.object.id",
+    Verifier:           server.HMACVerifier{Secret: os.Getenv("STRIPE_SECRET")},
 })
 
-srv.RegisterWebhook("github", server.WebhookConfig{
-    MessageName:        "PushEvent",
-    TenantID:           "acme",
-    CorrelationKeyPath: "repository.full_name",
-    HMACSecret:         os.Getenv("GITHUB_WEBHOOK_SECRET"),
+// Custom verifier — implement SignatureVerifier for any auth scheme
+srv.RegisterWebhook("internal", server.WebhookConfig{
+    MessageName: "InternalEvent",
+    TenantID:    "acme",
+    Verifier:    myCustomVerifier{},
 })
 ```
 
-**Signature verification:** When `HMACSecret` is set, the request must include an `X-Hub-Signature-256: sha256=<hex>` header. This is the same format used by GitHub, Stripe, and most webhook providers. Requests with missing or invalid signatures are rejected with `401`.
+**Signature verification is mandatory.** Every webhook must have a `Verifier` — requests are rejected with `401` if `Verifier` is nil or verification fails.
+
+Implement `server.SignatureVerifier` for any auth scheme:
+
+```go
+type SignatureVerifier interface {
+    Verify(r *http.Request, body []byte) bool
+}
+```
+
+The built-in `HMACVerifier` checks `X-Hub-Signature-256: sha256=<hex>` (GitHub, Stripe, and most providers).
 
 **Correlation key extraction:** `CorrelationKeyPath` is a dot-separated path into the JSON body (e.g. `"data.object.id"` extracts `ch_123` from `{"data":{"object":{"id":"ch_123"}}}`). The entire body is forwarded as process variables.
 

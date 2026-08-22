@@ -14,6 +14,36 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// SignatureVerifier checks the authenticity of an inbound webhook request.
+// Implementations receive the raw request and body so they can inspect any
+// headers or payload fields needed for verification.
+type SignatureVerifier interface {
+	Verify(r *http.Request, body []byte) bool
+}
+
+// HMACVerifier verifies X-Hub-Signature-256 using HMAC-SHA256.
+// This is compatible with GitHub, Stripe, and most webhook providers.
+//
+// Example: HMACVerifier{Secret: os.Getenv("STRIPE_WEBHOOK_SECRET")}
+type HMACVerifier struct {
+	Secret string
+}
+
+func (v HMACVerifier) Verify(r *http.Request, body []byte) bool {
+	const prefix = "sha256="
+	sig := r.Header.Get("X-Hub-Signature-256")
+	if !strings.HasPrefix(sig, prefix) {
+		return false
+	}
+	got, err := hex.DecodeString(sig[len(prefix):])
+	if err != nil {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(v.Secret))
+	mac.Write(body)
+	return hmac.Equal(got, mac.Sum(nil))
+}
+
 // WebhookConfig defines how an inbound webhook maps to a BPMN message.
 type WebhookConfig struct {
 	// MessageName is the BPMN message name to publish (required).
@@ -27,11 +57,10 @@ type WebhookConfig struct {
 	// the correlation key (e.g. "order.id"). If empty, correlation key is "".
 	CorrelationKeyPath string
 
-	// HMACSecret is an optional shared secret for verifying request signatures.
-	// When set, the request must include an X-Hub-Signature-256 header containing
-	// "sha256=<hex(HMAC-SHA256(secret, body))>". Requests that fail verification
-	// are rejected with 401.
-	HMACSecret string
+	// Verifier authenticates the inbound request (required).
+	// All requests must pass verification to be processed; requests with a nil
+	// verifier are rejected with 401. Use HMACVerifier as the default implementation.
+	Verifier SignatureVerifier
 }
 
 // RegisterWebhook registers a named webhook endpoint at POST /webhooks/{name}.
@@ -48,7 +77,7 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read body (up to 1 MB)
+	// Read body (up to 1 MB) before verification so the verifier has access to it.
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -56,16 +85,13 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify HMAC signature if configured
-	if cfg.HMACSecret != "" {
-		sig := r.Header.Get("X-Hub-Signature-256")
-		if !verifyHMAC(body, sig, cfg.HMACSecret) {
-			writeError(w, 401, "invalid signature")
-			return
-		}
+	// Verification is mandatory — reject if no verifier is configured or verification fails.
+	if cfg.Verifier == nil || !cfg.Verifier.Verify(r, body) {
+		writeError(w, 401, "invalid signature")
+		return
 	}
 
-	// Parse body as JSON to extract correlation key and variables
+	// Parse body as JSON to extract correlation key and variables.
 	var payload map[string]any
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -82,22 +108,6 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
-}
-
-// verifyHMAC checks that sig == "sha256=<hex(HMAC-SHA256(secret, body))>".
-func verifyHMAC(body []byte, sig, secret string) bool {
-	const prefix = "sha256="
-	if !strings.HasPrefix(sig, prefix) {
-		return false
-	}
-	got, err := hex.DecodeString(sig[len(prefix):])
-	if err != nil {
-		return false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	expected := mac.Sum(nil)
-	return hmac.Equal(got, expected)
 }
 
 // extractPath traverses a dot-separated path in a JSON object and returns the
