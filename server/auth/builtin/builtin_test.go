@@ -112,7 +112,6 @@ func TestMiddleware_RejectsJWTSignedWithWrongSecret(t *testing.T) {
 
 func TestMiddleware_AcceptsValidJWT_InjectsIdentity(t *testing.T) {
 	a := newAuth(&fakeStore{})
-	h := a.Middleware()(okHandler())
 
 	tok := signedJWT(t, "tenant-1", "user-1", testSecret, time.Now().Add(time.Hour))
 	req := httptest.NewRequest("GET", "/", nil)
@@ -120,7 +119,7 @@ func TestMiddleware_AcceptsValidJWT_InjectsIdentity(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	var got auth.Identity
-	h = a.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := a.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = auth.FromContext(r.Context())
 		w.WriteHeader(200)
 	}))

@@ -101,5 +101,10 @@ func parseEC(k jwk) (*ecdsa.PublicKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode y: %w", err)
 	}
-	return &ecdsa.PublicKey{Curve: curve, X: new(big.Int).SetBytes(xb), Y: new(big.Int).SetBytes(yb)}, nil
+	// Construct uncompressed point: 0x04 || x || y.
+	point := make([]byte, 1+len(xb)+len(yb))
+	point[0] = 0x04
+	copy(point[1:], xb)
+	copy(point[1+len(xb):], yb)
+	return ecdsa.ParseUncompressedPublicKey(curve, point)
 }
