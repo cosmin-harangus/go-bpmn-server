@@ -227,7 +227,92 @@ SaaS-only tools mean process data (employee names, approval decisions, financial
 
 ---
 
-## 6. Key Risks & Mitigations
+## 6. Execution Checklist
+
+This section translates the strategy into a concrete week-by-week action plan with GitHub issue references. Each item has a clear done state.
+
+---
+
+### Milestone 1: Foundation (Month 0–2) — due 2026-10-22
+
+**Goal:** Working hosted product + 3 design partners onboarded.
+
+#### Engineering (parallel tracks)
+
+| # | Issue | Done when |
+|---|---|---|
+| #9 | Builtin auth — PostgreSQL store + migrations | `AUTH_MODE=builtin` works end-to-end; login → JWT → API call succeeds |
+| #10 | Builtin auth — admin CLI | `create-account`, `create-user`, `create-api-key` commands work |
+| #11 | Hosted SaaS infrastructure | Product live at `https://<domain>`; auto-deploy from main |
+| #12 | Web UI — BPMN designer | User can draw, save, and deploy a process from the browser |
+| #13 | Web UI — process dashboard | Instances, incidents visible; cancel/suspend/resume actions work |
+| #14 | Web UI — user task inbox | User can claim, complete, and unclaim tasks from the browser |
+| #15 | Process templates (5 diagrams) | Templates selectable from "New process" picker; deploy and run cleanly |
+| #17 | GET /processes endpoint | Process list page in UI populates correctly |
+| #25 | README update | Auth, deployment, admin CLI all documented |
+| #5  | History endpoint | GET/DELETE /instances/:id/history works |
+
+#### GTM (starts week 3, after product is stable enough to demo)
+
+| # | Issue | Done when |
+|---|---|---|
+| #18 | Design partner outreach | 3 signed agreements + intro calls done |
+
+**Week-by-week:**
+- **Week 1–2:** Infrastructure (#11) + auth PostgreSQL store (#9) — get the backend fully functional
+- **Week 3–4:** Admin CLI (#10) + UI scaffold started (#12, #13, #14)
+- **Week 5–6:** UI features complete — designer, dashboard, task inbox
+- **Week 7–8:** Templates (#15) + endpoint (#17) + README (#25)
+- **Week 6–8 (parallel):** Design partner outreach (#18) — start once you can demo a working product
+
+---
+
+### Milestone 2: Soft Launch (Month 2–6) — due 2027-02-22
+
+**Goal:** 10 paying clients, $490–$735 MRR.
+
+#### Engineering
+
+| # | Issue | Done when |
+|---|---|---|
+| #16 | Billing — Stripe integration | Checkout, webhook, portal, and limit enforcement all work |
+| #19 | Landing page | Live at domain, trial CTA working, Lighthouse >90 |
+
+#### GTM
+
+| # | Issue | Done when |
+|---|---|---|
+| #20 | G2 + Capterra listings | Profiles live with 5+ reviews each |
+| #21 | Product Hunt launch | Post submitted; maker comment live; design partners briefed |
+| #22 | Hacker News Show HN | Post submitted; top-level comments replied to |
+
+**Step-by-step:**
+1. **Month 2, week 1:** Landing page live (#19) + billing wired (#16) — required before any public launch
+2. **Month 2, week 2:** Design partners leave G2/Capterra reviews (#20)
+3. **Month 2–6 ongoing:** LinkedIn outreach 30–50 messages/week to ops managers (not tracked as an issue — recurring action)
+4. **Month 3:** Product Hunt launch (#21) — requires G2 profile live and design partners briefed
+5. **Month 3–4:** Hacker News Show HN (#22) — 2–3 weeks after Product Hunt to separate the signals
+
+---
+
+### Milestone 3: Growth (Month 6–12) — due 2027-08-22
+
+**Goal:** 20 paying clients, first $3.5K MRR, inbound leads starting.
+
+| # | Issue | Done when |
+|---|---|---|
+| #23 | SEO article — Camunda alternative | Published, indexed, ranking for target keywords |
+| #24 | Template landing pages (5) | All 5 pages live, indexed, download + trial CTA working |
+
+**Step-by-step:**
+1. **Month 6:** Publish first SEO article (#23)
+2. **Month 6:** Template landing pages live (#24)
+3. **Month 6–12 ongoing:** One technical blog post per month (not tracked as an issue — recurring action)
+4. **Month 12:** Evaluate Phase 2 OSS transition trigger conditions (20+ clients, stable product)
+
+---
+
+## 7. Key Risks & Mitigations
 
 | Risk | Mitigation |
 |---|---|
